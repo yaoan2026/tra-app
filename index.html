@@ -409,7 +409,8 @@ async function refreshLive(){
       PLATFORM = Object.fromEntries(rows
         .map(x=>[String(x.TrainNo||'').trim(), String(x.Platform || x.BoardingPlatform || '').replace(/月台$/,'').trim()])
         .filter(([no,p])=>no && p));
-      PLAT_NOTE = Object.keys(PLATFORM).length ? '' : `即時看板目前無月台資料（共 ${rows.length} 筆）`;
+      const cols = rows[0] ? '｜欄位：' + Object.keys(rows[0]).join(', ') : '';
+      PLAT_NOTE = Object.keys(PLATFORM).length ? '' : `即時看板目前無月台資料（共 ${rows.length} 筆${cols}）`;
     }else{
       PLAT_NOTE = `月台資料失敗：${stRes.reason?.message || '無法取得'}`;
     }
