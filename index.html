@@ -75,6 +75,7 @@ main{max-width:640px;margin:0 auto;padding:12px 16px calc(env(safe-area-inset-bo
 .delay{font-size:12px;font-weight:700;padding:2px 7px;border-radius:6px;justify-self:end;align-self:center}
 .delay.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .delay.late{color:var(--late);background:color-mix(in srgb,var(--late) 14%,transparent)}
+.plat{font-size:12px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--brand-2);color:var(--brand)}
 .next-badge{font-size:11px;background:var(--accent);color:#fff;border-radius:5px;padding:1px 6px}
 /* overlay */
 .overlay{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
@@ -366,7 +367,7 @@ function toggleFav(){
 }
 
 /* ---------- 查詢 ---------- */
-let liveTimer = null, DELAY = {};
+let liveTimer = null, DELAY = {}, PLATFORM = {}, PLAT_NOTE = '';
 async function search(){
   const res = $('#results');
   if(!S.from || !S.to){ res.innerHTML = '<div class="status">請先選擇起站與迄站</div>'; return; }
@@ -385,7 +386,7 @@ async function search(){
         fullType:t.TrainInfo.TrainTypeName.Zh_tw, head:t.TrainInfo.TripHeadSign || ('往'+t.TrainInfo.EndingStationName.Zh_tw),
         dep:o.DepartureTime, arr:d.ArrivalTime, dur, note:t.TrainInfo.Note||'', susp: t.TrainInfo.SuspendedFlag || o.SuspendedFlag || d.SuspendedFlag };
     }).filter(Boolean).sort((a,b)=>toMin(a.dep)-toMin(b.dep)) };
-    DELAY = {};
+    DELAY = {}; PLATFORM = {}; PLAT_NOTE = '';
     renderResults(true);
     clearInterval(liveTimer);
     if(S.date === twNow().date){ refreshLive(); liveTimer = setInterval(refreshLive, 60e3); }
@@ -396,9 +397,23 @@ async function search(){
 async function refreshLive(){
   if(document.hidden || !S.last || S.last.date !== twNow().date) return;
   try{
-    const j = await api('/TrainLiveBoard?$select=TrainNo,DelayTime', { ttl: 50e3 });
-    DELAY = Object.fromEntries((j.TrainLiveBoards||[]).map(x=>[x.TrainNo, x.DelayTime]));
-    renderResults();
+    const [liveRes, stRes] = await Promise.allSettled([
+      api('/TrainLiveBoard?$select=TrainNo,DelayTime', { ttl: 50e3 }),
+      api(`/StationLiveBoard/Station/${S.last.from}`, { ttl: 50e3 })
+    ]);
+    if(liveRes.status === 'fulfilled'){
+      DELAY = Object.fromEntries((liveRes.value.TrainLiveBoards||[]).map(x=>[x.TrainNo, x.DelayTime]));
+    }
+    if(stRes.status === 'fulfilled'){
+      const rows = stRes.value?.StationLiveBoards || stRes.value?.LiveBoards || (Array.isArray(stRes.value) ? stRes.value : []);
+      PLATFORM = Object.fromEntries(rows
+        .map(x=>[String(x.TrainNo||'').trim(), String(x.Platform || x.BoardingPlatform || '').replace(/月台$/,'').trim()])
+        .filter(([no,p])=>no && p));
+      PLAT_NOTE = Object.keys(PLATFORM).length ? '' : `即時看板目前無月台資料（共 ${rows.length} 筆）`;
+    }else{
+      PLAT_NOTE = `月台資料失敗：${stRes.reason?.message || '無法取得'}`;
+    }
+    if(liveRes.status === 'fulfilled' || stRes.status === 'fulfilled' || PLAT_NOTE) renderResults();
   }catch{ /* 即時資訊失敗不影響時刻表 */ }
 }
 document.addEventListener('visibilitychange', () => { if(!document.hidden) refreshLive(); });
@@ -417,11 +432,13 @@ function renderResults(scroll){
 
   let h = `<div class="res-head"><div><b>${A?.name||''} → ${B?.name||''}</b>　${fmtDate(L.date)}　共 ${shown.length} 班</div>
     <button class="star ${fav?'on':''}" id="btnFav" aria-label="加入常用路線">${fav?'★':'☆'}</button></div>`;
+  if(isToday && PLAT_NOTE) h += `<div class="hint" style="margin:0 2px 8px">${PLAT_NOTE}</div>`;
   if(hiddenCount) h += `<div class="hint" style="margin:0 2px 8px">已隱藏 ${S.time} 前的 ${hiddenCount} 班，<a href="#" id="showAll">顯示全部</a></div>`;
   if(!shown.length) h += `<div class="status">${list.length ? '此時段之後沒有符合的班次' : '這天沒有直達的班次，可能需要轉乘'}${isToday ? '<br><a href="#" id="goTomorrow" style="color:var(--brand)">查詢明天的班次 →</a>' : ''}</div>`;
   h += '<div class="list">' + shown.map(t => {
     const ti = typeInfo(t.code);
     const d = DELAY[t.no];
+    const plat = PLATFORM[String(t.no).trim()];
     const past = isToday && toMin(t.dep) + (d||0) < nowMin;
     let badge = '';
     if(t.susp) badge = '<span class="delay late">停駛</span>';
@@ -429,7 +446,7 @@ function renderResults(scroll){
     return `<button class="train ${past?'past':''}" style="--c:var(${ti.c})" data-no="${t.no}">
       <div class="times">${t.dep}<i>→</i>${t.arr}</div>
       <div class="dur">${fmtDur(t.dur)}</div>
-      <div class="meta"><span class="tag">${t.type}</span><span>${t.no} 次</span><span>${t.head}</span>${t===firstUpcoming?'<span class="next-badge">下一班</span>':''}</div>
+      <div class="meta"><span class="tag">${t.type}</span><span>${t.no} 次</span>${plat?`<span class="plat">${plat} 月台</span>`:''}<span>${t.head}</span>${t===firstUpcoming?'<span class="next-badge">下一班</span>':''}</div>
       ${badge || '<span></span>'}
     </button>`;
   }).join('') + '</div>';
