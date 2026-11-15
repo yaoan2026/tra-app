@@ -496,7 +496,7 @@ $('#results').addEventListener('click', async e => {
 /* ---------- 設定 ---------- */
 $('#btnSettings').onclick = () => {
   const k = store.get('key', {}) || {};
-  openSheet('設定', '資料來源：交通部 TDX 運輸資料流通服務', `<div class="form">
+  openSheet('設定', '資料來源：交通部 TDX 運輸資料流通服務（v2）', `<div class="form">
     <p class="hint">不填金鑰也能使用，但查詢次數有限制。若常出現「查詢太頻繁」，可到
     <a href="https://tdx.transportdata.tw/register" target="_blank" rel="noopener">TDX 官網</a> 免費註冊，在「會員中心 → API 金鑰」取得金鑰後填入。金鑰只存在這支手機上。</p>
     <label>Client ID</label><input id="kId" value="${k.id||''}" autocomplete="off" autocapitalize="off" spellcheck="false">

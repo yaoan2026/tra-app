@@ -1,5 +1,5 @@
 // 離線快取 App 外殼；班次資料一律走網路（即時資料不快取）
-const CACHE = 'tra-app-v1';
+const CACHE = 'tra-app-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== location.origin || e.request.method !== 'GET') return;
   // 網路優先，離線時用快取
   e.respondWith(
-    fetch(e.request).then(r => {
+    fetch(e.request, { cache: 'no-cache' }).then(r => {
       const copy = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return r;
